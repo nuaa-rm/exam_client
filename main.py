@@ -1,3 +1,3 @@
-from capture.test_screen_capture import main
+from capture.test_camera_capture import main
 
 main()

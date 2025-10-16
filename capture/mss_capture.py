@@ -6,12 +6,12 @@ from capture.base_capture import BaseCapture
 
 
 class MssCapture(BaseCapture):
-    def __init__(self, idx: int, fps: int = 24):
+    def __init__(self, idx: int, name: str, fps: int = 24):
         self.sct = mss.mss()
         self.monitor = self.sct.monitors[idx + 1]
         self.sct.close()
         self.sct = None
-        super().__init__(f"Monitor_{idx}", self.monitor["width"], self.monitor["height"], fps)
+        super().__init__(name, self.monitor["width"], self.monitor["height"], fps)
 
     def capture_frame(self) -> np.ndarray:
         """Capture a single frame and return it as a numpy array."""

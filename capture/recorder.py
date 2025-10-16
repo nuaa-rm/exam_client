@@ -116,6 +116,13 @@ class Recorder:
                     self.output_container.mux(packet)
             encode_time = time.time() - encode_start
             
+            # 控制帧率
+            if not self.capture.auto_wait:
+                elapsed = time.time() - start_time
+                sleep_time = max(0, 1 / self.capture.fps - elapsed)
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+
             # 性能监控（可选）
             if frame_count % 100 == 0:
                 elapsed = time.time() - start_time
@@ -128,13 +135,6 @@ class Recorder:
                     f"总计={elapsed*1000:.2f}ms, "
                     f"实际帧率={fps_actual:.2f}fps"
                 )
-            
-            # 控制帧率
-            if not self.capture.auto_wait:
-                elapsed = time.time() - start_time
-                sleep_time = max(0, 1 / self.capture.fps - elapsed)
-                if sleep_time > 0:
-                    time.sleep(sleep_time)
         if hasattr(self, 'capture') and self.capture:
             self.capture.stop()
     
@@ -191,7 +191,12 @@ class Recorder:
             
         self._cleanup()
 
+    def __del__(self):
+        self.stop()
+
     def _cleanup(self):
+        if self.recording is False:
+            return
         self.recording = False
         self.logger.info("开始清理资源")
         

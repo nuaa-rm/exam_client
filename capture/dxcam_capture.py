@@ -6,7 +6,7 @@ from capture.base_capture import BaseCapture
 
 
 class DxcamCapture(BaseCapture):
-    def __init__(self, idx: int, fps: int = 24):
+    def __init__(self, idx: int, name: str, fps: int = 24):
         self.camera = None
         output_info_str = dxcam.output_info()
         
@@ -33,7 +33,7 @@ class DxcamCapture(BaseCapture):
         device_idx = output_dict[idx]["device"]
         width, height = output_dict[idx]["resolution"]
 
-        super().__init__(f"Monitor_{idx}", width, height, fps)
+        super().__init__(name, width, height, fps)
         self.camera = dxcam.create(device_idx=device_idx, output_idx=idx, output_color="BGR")
         if self.camera is None:
             raise ValueError(f"无法创建 Dxcam 设备，索引: {idx}")
