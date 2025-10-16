@@ -8,3 +8,4 @@ dxcam
 wmi
 psutil
 requests
+pyjwt[crypto]
