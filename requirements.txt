@@ -5,3 +5,6 @@ av
 opencv-python
 numpy
 dxcam
+wmi
+psutil
+requests
