@@ -8,6 +8,11 @@ import shutil
 import subprocess
 import re
 
+from utils.logger import getLogger
+
+
+logger = getLogger(__name__)
+
 
 class VRAMMonitor:
     def __init__(self):
@@ -53,9 +58,9 @@ class VRAMMonitor:
                     elif total_mem_mb and used_mb >= int(total_mem_mb * 0.7):
                         alerts.append({'id': f'vram-nvidia-highpct-{pid}', 'text': f'Process {pname} (pid {pid}) using {used_mb} MiB >= 70% of GPU total {total_mem_mb} MiB', 'meta': {'pid': pid, 'process': pname, 'used_mb': used_mb, 'gpu_total_mb': total_mem_mb}})
         except subprocess.CalledProcessError:
-            pass
+            logger.debug('nvidia-smi query failed', exc_info=True)
         except FileNotFoundError:
-            pass
+            logger.debug('nvidia-smi not found')
         return alerts
 
     def _parse_rocm_smi(self) -> List[Dict]:
@@ -89,9 +94,9 @@ class VRAMMonitor:
                     elif total_mem_mb and used_mb >= int(total_mem_mb * 0.7):
                         alerts.append({'id': f'vram-rocm-highpct-{pid}', 'text': f'Process {pname} (pid {pid}) using approx {used_mb} MiB >= 70% of GPU total {total_mem_mb} MiB (rocm-smi)', 'meta': {'pid': pid, 'process': pname, 'used_mb': used_mb, 'gpu_total_mb': total_mem_mb}})
         except subprocess.CalledProcessError:
-            pass
+            logger.debug('rocm-smi query failed', exc_info=True)
         except FileNotFoundError:
-            pass
+            logger.debug('rocm-smi not found')
         return alerts
 
     def __call__(self) -> List[Dict]:

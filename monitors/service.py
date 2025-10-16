@@ -4,6 +4,10 @@ import threading
 import time
 
 from . import VMMonitor, VRAMMonitor, MemMonitor, NetMonitor
+from utils.logger import getLogger
+
+
+logger = getLogger(__name__)
 
 
 class MonitorService:
@@ -46,11 +50,9 @@ class MonitorService:
                 try:
                     self.callback(merged)
                 except Exception:
-                    # 回调错误不应终止服务
-                    pass
+                    logger.exception('MonitorService callback raised an exception')
             except Exception:
-                # 内部错误继续循环
-                pass
+                logger.exception('Unexpected error in MonitorService main loop')
             # 等待 interval 秒或直到停止
             self._stop_event.wait(self.interval)
 
@@ -60,8 +62,10 @@ class MonitorService:
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
+        logger.info('MonitorService started with interval=%s', self.interval)
 
     def stop(self, join: bool = False):
         self._stop_event.set()
         if join and self._thread:
             self._thread.join(timeout=5.0)
+        logger.info('MonitorService stopped')

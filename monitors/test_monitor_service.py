@@ -1,9 +1,14 @@
 import time
+
 from monitors import MonitorService
+from utils.logger import getLogger
+
+
+logger = getLogger(__name__)
 
 
 def cb(alerts):
-    print('Callback received alerts:', alerts)
+    logger.info('Callback received alerts: %s', alerts)
 
 
 if __name__ == '__main__':
@@ -12,4 +17,4 @@ if __name__ == '__main__':
     # 等待一次采样执行完（2.5s）
     time.sleep(2.5)
     svc.stop(join=True)
-    print('Service stopped')
+    logger.info('Service stopped')

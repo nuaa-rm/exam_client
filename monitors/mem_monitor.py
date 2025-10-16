@@ -2,7 +2,13 @@
 检测系统内存占用并检测敏感进程名
 """
 from typing import List, Dict
+
 import psutil
+
+from utils.logger import getLogger
+
+
+logger = getLogger(__name__)
 
 
 class MemMonitor:
@@ -32,12 +38,14 @@ class MemMonitor:
                         elif total_mb > 0 and mem_rss >= int(total_mb * 0.7):
                             alerts.append({'id': f'mem-process-highpct-{p.info.get("pid")}', 'text': f'Process {name} (pid {p.info.get("pid")}) using {mem_rss} MiB >= 70% of total memory ({total_mb} MiB)', 'meta': {'pid': p.info.get('pid'), 'process': name, 'used_mb': mem_rss}})
                     except Exception:
-                        pass
+                        logger.debug('Error checking process memory thresholds', exc_info=True)
                     for s in self.sensitive_names:
                         if s in name:
                             alerts.append({'id': f'mem-sensitive-{p.info.get("pid")}-{s}', 'text': f'Sensitive process name matched: {name} (pid {p.info.get("pid")}) memory {mem_rss} MiB', 'meta': {'pid': p.info.get('pid'), 'process': name, 'used_mb': mem_rss, 'matched': s}})
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    # common and expected for short-lived or protected processes
+                    logger.debug('Process disappeared or access denied during memory check')
                     continue
         except Exception:
-            pass
+            logger.exception('Failed to run MemMonitor')
         return alerts

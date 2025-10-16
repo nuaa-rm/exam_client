@@ -4,10 +4,12 @@
 from typing import List, Dict
 import platform
 
-try:
-    import wmi
-except Exception:
-    wmi = None
+import wmi
+
+from utils.logger import getLogger
+
+
+logger = getLogger(__name__)
 
 
 class VMMonitor:
@@ -38,7 +40,7 @@ class VMMonitor:
                     if kw in text:
                         alerts.append({'id': f'vm-dmi-{kw}', 'text': f"Detected virtualization keyword in WMI: {kw}", 'meta': {'matched': kw, 'manufacturer': manufacturer, 'model': model}})
         except Exception:
-            pass
+            logger.exception('WMI system check failed')
         return alerts
 
     def _check_mac_oui(self) -> List[Dict]:
@@ -60,7 +62,7 @@ class VMMonitor:
                 if prefix in vm_ouis:
                     alerts.append({'id': f'vm-mac-{prefix}', 'text': f'Network MAC OUI suggests virtual NIC: {mac}', 'meta': {'mac': mac}})
         except Exception:
-            pass
+            logger.exception('MAC OUI check failed')
         return alerts
 
     def __call__(self) -> List[Dict]:

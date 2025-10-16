@@ -5,6 +5,10 @@ import requests
 from urllib import parse
 
 from .service import MonitorService
+from utils.logger import getLogger
+
+
+logger = getLogger(__name__)
 
 
 class MonitorReporter:
@@ -32,7 +36,7 @@ class MonitorReporter:
             res = requests.post(os.path.join(self.endpoint, '/exam/report'), json={'alerts': alerts}, cookies=self.session, headers=HEADERS)
             res.raise_for_status()
         except Exception:
-            pass
+            logger.exception('Failed to report alerts to server')
 
     def start(self):
         self.service.start()

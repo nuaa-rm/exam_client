@@ -3,6 +3,10 @@
 """
 from typing import List, Dict
 import requests
+from utils.logger import getLogger
+
+
+logger = getLogger(__name__)
 
 
 class NetMonitor:
@@ -19,5 +23,6 @@ class NetMonitor:
                 if r.status_code == 200:
                     alerts.append({'id': f'net-reachable-{u}', 'text': f'Internet reachable: {u}', 'meta': {'url': u, 'status_code': r.status_code}})
             except requests.RequestException:
+                logger.debug('Network probe failed for %s', u, exc_info=True)
                 continue
         return alerts
