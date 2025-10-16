@@ -20,3 +20,7 @@ def main():
     time.sleep(20)
     for recorder in recorders:
         recorder.stop()
+
+
+if __name__ == "__main__":
+    main()

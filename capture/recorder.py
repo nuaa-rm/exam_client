@@ -2,6 +2,7 @@ from threading import Thread, Event, Lock
 from pathlib import Path
 import time
 import atexit
+import hashlib
 
 import av
 import cv2
@@ -12,8 +13,9 @@ from utils.logger import getLogger
 
 
 class Recorder:
-    def __init__(self, capture: BaseCapture, preferred_encoder=None):
+    def __init__(self, capture: BaseCapture, sid: str = "", preferred_encoder=None):
         self.capture = capture
+        self.sid = sid
         self.output_path = Path('./media') / self.capture.name
         self.preferred_encoder = preferred_encoder
         self.recording = False
@@ -27,6 +29,9 @@ class Recorder:
         self.latest_segments = []
         # 用于保护 latest_segments 的锁
         self.segments_lock = Lock()
+        
+        # 签名计数器，每3次运行生成一次签名
+        self.sign_counter = 0
         
         # 注册退出时的清理函数
         atexit.register(self._cleanup)
@@ -147,9 +152,10 @@ class Recorder:
             # 从当前编号+1开始向后查找
             check_number = current_check_number + 1
             found_new = False
+            last_segment_number = None
             
             while True:
-                segment_file = path.parent / f'monitor_{check_number}.ts'
+                segment_file = path / f'video_{check_number}.ts'
                 if segment_file.exists():
                     # 找到新切片，添加到列表（使用锁保证线程安全）
                     with self.segments_lock:
@@ -159,6 +165,7 @@ class Recorder:
                             self.latest_segments.pop(0)
                     
                     current_check_number = check_number
+                    last_segment_number = check_number
                     check_number += 1
                     found_new = True
                 else:
@@ -168,9 +175,53 @@ class Recorder:
             if found_new:
                 with self.segments_lock:
                     self.logger.debug(f"检测到新切片，最新切片编号: {self.latest_segments}")
+                
+                # 签名计数器递增
+                self.sign_counter += 1
+                
+                # 每3次运行生成一次签名
+                if self.sign_counter >= 3 and last_segment_number is not None:
+                    self._generate_signature(last_segment_number)
+                    self.sign_counter = 0  # 重置计数器
             
             # 等待3秒后再次检查
             time.sleep(3)
+    
+    def _generate_signature(self, segment_number: int):
+        """
+        为指定的切片文件生成签名文件
+        
+        Args:
+            segment_number: 切片编号
+        """
+        try:
+            segment_file = self.output_path / f'video_{segment_number}.ts'
+            sig_file = self.output_path / f'video_{segment_number}.sig'
+            
+            # 读取切片文件内容
+            if not segment_file.exists():
+                self.logger.warning(f"切片文件不存在: {segment_file}")
+                return
+            
+            with open(segment_file, 'rb') as f:
+                file_content = f.read()
+            
+            # 使用 sha1 算法计算哈希，加盐：固定字符串 + self.sid
+            salt = f"CkyfExamClient_video_signature_{self.sid}"
+            sha1 = hashlib.sha1()
+            sha1.update(salt.encode('utf-8'))
+            sha1.update(file_content)
+            hash_value = sha1.hexdigest()
+            
+            # 写入签名文件：格式为 "hash+sid"
+            signature_content = f"{hash_value}+{self.sid}"
+            with open(sig_file, 'w', encoding='utf-8') as f:
+                f.write(signature_content)
+            
+            self.logger.debug(f"已生成签名文件: video_{segment_number}.sig")
+            
+        except Exception as e:
+            self.logger.error(f"生成签名文件失败 (video_{segment_number}.sig): {e}", exc_info=True)
     
     def get_latest_segments(self):
         """
