@@ -181,6 +181,36 @@ class Recorder:
         """
         with self.segments_lock:
             return self.latest_segments.copy()
+    
+    def generate_live_m3u8(self):
+        """
+        基于最新的切片生成直播形式的 m3u8 文件内容
+        
+        Returns:
+            str: m3u8 格式的播放列表内容
+        """
+        latest_segments = self.get_latest_segments()
+        
+        if not latest_segments:
+            # 如果没有切片,返回空的 m3u8
+            return "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:3\n"
+        
+        # 构建 m3u8 内容
+        m3u8_lines = [
+            "#EXTM3U",
+            "#EXT-X-VERSION:3",
+            "#EXT-X-TARGETDURATION:3",  # 每个切片的目标时长
+            f"#EXT-X-MEDIA-SEQUENCE:{latest_segments[0]}",  # 第一个切片的序号
+        ]
+        
+        # 添加每个切片
+        for segment_num in latest_segments:
+            m3u8_lines.append("#EXTINF:3.0,")  # 切片时长
+            m3u8_lines.append(f"video_{segment_num}.ts")
+        
+        # 注意: 不添加 #EXT-X-ENDLIST,因为这是直播流,还在继续生成
+        
+        return "\n".join(m3u8_lines) + "\n"
                     
     def stop(self):
         self.stop_event.set()
