@@ -15,6 +15,7 @@ from utils.logger import getLogger
 class Recorder:
     def __init__(self, capture: BaseCapture, sid: str = "", preferred_encoder=None):
         self.capture = capture
+        self.name = capture.name
         self.sid = sid
         self.output_path = Path('./media') / self.capture.name
         self.preferred_encoder = preferred_encoder
@@ -257,7 +258,7 @@ class Recorder:
         # 添加每个切片
         for segment_num in latest_segments:
             m3u8_lines.append("#EXTINF:3.0,")  # 切片时长
-            m3u8_lines.append(f"video_{segment_num}.ts")
+            m3u8_lines.append(f"/recorder/file/{self.name}/video_{segment_num}.ts")
         
         # 注意: 不添加 #EXT-X-ENDLIST,因为这是直播流,还在继续生成
         

@@ -9,3 +9,4 @@ wmi
 psutil
 requests
 pyjwt[crypto]
+Pillow

@@ -1,7 +1,5 @@
 import time
 
-import mss
-
 from capture.recorder import Recorder
 from capture.screen_capture import create_capture, get_available_monitors
 
