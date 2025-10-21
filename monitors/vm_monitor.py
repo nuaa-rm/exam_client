@@ -51,7 +51,7 @@ class VMMonitor:
                 return alerts
             c = wmi.WMI()
             macs = []
-            for nic in c.Win32_NetworkAdapter(ConfigurationManagerErrorCode=0):
+            for nic in c.Win32_NetworkAdapter():
                 mac = (getattr(nic, 'MACAddress', None) or '')
                 if mac:
                     macs.append(mac)

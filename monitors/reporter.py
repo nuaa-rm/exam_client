@@ -18,22 +18,30 @@ class MonitorReporter:
             'user-agent': 'exam-client/1.0'
         }
         data = {'uname': username, 'password': password, 'tfa': None, 'authnChallenge': None}
-        res = requests.post(os.path.join(endpoint, '/exam/login'), data=parse.urlencode(data), headers=HEADERS)
+        res = requests.post(f'http://{endpoint}/exam/login', data=parse.urlencode(data), headers=HEADERS)
         res.raise_for_status()
         self.session = res.cookies
         self.endpoint = endpoint
         self.service = MonitorService(callback=self.report, interval=interval)
+        self.alerts: List[Dict] | None = None
+
+    def get_cookies(self):
+        return self.session
+
+    def get_alerts(self):
+        return self.alerts
 
     def report(self, alerts: List[Dict]):
         if not alerts:
             return
         try:
+            self.alerts = alerts.copy()
             HEADERS = {
                 'Content-Type': 'application/json;charset=utf-8',
                 'accept': 'application/json',
                 'user-agent': 'exam-client/1.0'
             }
-            res = requests.post(os.path.join(self.endpoint, '/exam/report'), json={'alerts': alerts}, cookies=self.session, headers=HEADERS)
+            res = requests.post(f'http://{self.endpoint}/exam/report', json={'alerts': alerts}, cookies=self.session, headers=HEADERS)
             res.raise_for_status()
         except Exception:
             logger.exception('Failed to report alerts to server')
