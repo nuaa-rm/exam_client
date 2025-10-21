@@ -7,8 +7,10 @@ import os
 from fastapi import FastAPI, Response, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import mss
 from PIL import Image
+import uvicorn
 
 from .range_response import RangeResponse
 from .auth import JWTAuthMiddleware
@@ -142,3 +144,17 @@ async def get_media_file(request: Request, path: str):
     else:
         media_type = "application/octet-stream"
     return RangeResponse(request, full_path, content_type=media_type)
+
+
+# Mount static files directory at root so that files in ./static are served from '/'
+# Use html=True to allow serving index.html for '/'
+static_dir = os.path.abspath('./static')
+if os.path.isdir(static_dir):
+    app.mount('/', StaticFiles(directory=static_dir, html=True), name='static')
+    logger.info("Mounted static files at / -> %s", static_dir)
+else:
+    logger.warning("Static directory not found, not mounted: %s", static_dir)
+
+
+def run_server():
+    uvicorn.run(app, host="0.0.0.0", port=34519)

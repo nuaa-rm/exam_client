@@ -10,3 +10,4 @@ psutil
 requests
 pyjwt[crypto]
 Pillow
+pywebview

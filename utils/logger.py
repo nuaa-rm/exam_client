@@ -18,7 +18,7 @@ LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
 
 # 全局日志级别
-LOG_LEVEL = logging.INFO
+LOG_LEVEL = logging.DEBUG
 
 # 用于存储已创建的 logger，避免重复配置
 _loggers = {}

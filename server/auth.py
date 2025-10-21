@@ -1,4 +1,5 @@
 import typing
+import ipaddress
 from fastapi import Request, HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 import jwt
@@ -13,8 +14,9 @@ logger = getLogger("server.auth")
 class JWTAuthMiddleware(BaseHTTPMiddleware):
     """Middleware that checks for a valid JWT in the 'teacher_jwt' cookie.
 
-    It expects RS256-signed JWTs and verifies them against the public key
-    provided in `config.jwt_public_key`.
+    Behavior change: requests coming from loopback addresses (e.g. 127.0.0.1 or ::1)
+    will bypass JWT verification. For such local requests `request.state.teacher_payload`
+    will be set to {'local': True} so downstream handlers can detect the bypass.
     """
 
     def __init__(self, app, exempt_paths: typing.Optional[typing.List[str]] = None):
@@ -29,9 +31,35 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
             logger.debug("Path exempted from auth: %s", path)
             return await call_next(request)
 
+        # try to detect if request comes from a loopback (localhost) IP and skip auth
+        # Note: depending on deployment (reverse proxy), the client IP may be in headers
+        client_ip = None
+        # prefer X-Forwarded-For if present (first value), fall back to client.host
+        xff = request.headers.get("x-forwarded-for") or request.headers.get("X-Forwarded-For")
+        if xff:
+            # X-Forwarded-For may contain comma-separated list; take first
+            client_ip = xff.split(",")[0].strip()
+            logger.debug("Found X-Forwarded-For: %s", client_ip)
+        else:
+            # starlette Request.client may be None in some cases; guard it
+            if request.client and request.client.host:
+                client_ip = request.client.host
+
+        if client_ip:
+            try:
+                ip = ipaddress.ip_address(client_ip)
+                if ip.is_loopback:
+                    # mark as local and bypass JWT verification
+                    request.state.teacher_payload = {"local": True}
+                    logger.info("Bypassing JWT for local request from %s to %s", client_ip, path)
+                    return await call_next(request)
+            except ValueError:
+                # not a valid IP address; proceed with normal auth
+                logger.debug("Could not parse client IP: %s", client_ip)
+
         token = request.cookies.get("teacher_jwt")
         if not token:
-            logger.warning("Missing teacher_jwt cookie for path: %s", path)
+            logger.warning("Missing teacher_jwt cookie for path: %s (client_ip=%s)", path, client_ip)
             raise HTTPException(status_code=401, detail="Missing teacher_jwt cookie")
 
         try:

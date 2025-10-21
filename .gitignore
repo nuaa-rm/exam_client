@@ -3,3 +3,4 @@ media
 logs
 __pycache__
 crypt.key
+static
