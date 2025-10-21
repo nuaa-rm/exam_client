@@ -96,32 +96,50 @@ class Recorder:
         
     def _record_screen(self):
         frame_count = 0
+        # 增加错误重试机制：遇到异常最多重试 3 次，仍失败则退出循环并记录错误
+        retry_count = 0
+        max_retries = 3
         while not self.stop_event.is_set():
             start_time = time.time()
             frame_count += 1
-            
-            # 捕获屏幕
-            capture_start = time.time()
-            frame_array = self.capture.capture_frame()
-            capture_time = time.time() - capture_start
-            
-            # 转换为合适的颜色空间
-            convert_start = time.time()
-            if self.stream.pix_fmt == 'nv12':
-                frame_yuv = cv2.cvtColor(frame_array, cv2.COLOR_BGR2YUV_I420)
-                av_frame = av.VideoFrame.from_ndarray(frame_yuv, format='yuv420p') # type: ignore
-            else:
-                frame_rgb = cv2.cvtColor(frame_array, cv2.COLOR_BGR2RGB)
-                av_frame = av.VideoFrame.from_ndarray(frame_rgb, format='rgb24') # type: ignore
-            convert_time = time.time() - convert_start
-            
-            # 编码并写入
-            encode_start = time.time()
-            for packet in self.stream.encode(av_frame):
-                if self.output_container:
-                    self.output_container.mux(packet)
-            encode_time = time.time() - encode_start
-            
+
+            try:
+                # 捕获屏幕
+                capture_start = time.time()
+                frame_array = self.capture.capture_frame()
+                capture_time = time.time() - capture_start
+
+                # 转换为合适的颜色空间
+                convert_start = time.time()
+                if self.stream.pix_fmt == 'nv12':
+                    frame_yuv = cv2.cvtColor(frame_array, cv2.COLOR_BGR2YUV_I420)
+                    av_frame = av.VideoFrame.from_ndarray(frame_yuv, format='yuv420p') # type: ignore
+                else:
+                    frame_rgb = cv2.cvtColor(frame_array, cv2.COLOR_BGR2RGB)
+                    av_frame = av.VideoFrame.from_ndarray(frame_rgb, format='rgb24') # type: ignore
+                convert_time = time.time() - convert_start
+
+                # 编码并写入
+                encode_start = time.time()
+                for packet in self.stream.encode(av_frame):
+                    if self.output_container:
+                        self.output_container.mux(packet)
+                encode_time = time.time() - encode_start
+
+                # 如果成功执行到此，重置重试计数器
+                retry_count = 0
+
+            except Exception as e:
+                # 记录异常并尝试重试
+                retry_count += 1
+                self.logger.error(f"录制帧时发生错误 (尝试 {retry_count}/{max_retries}): {e}", exc_info=True)
+                if retry_count >= max_retries:
+                    self.logger.error(f"连续 {max_retries} 次重试仍失败，停止录制循环。最后错误: {e}")
+                    break
+                # 小的回退延迟后继续重试
+                time.sleep(0.5)
+                continue
+
             # 控制帧率
             if not self.capture.auto_wait:
                 elapsed = time.time() - start_time
@@ -141,6 +159,7 @@ class Recorder:
                     f"总计={elapsed*1000:.2f}ms, "
                     f"实际帧率={fps_actual:.2f}fps"
                 )
+        self.recording = False
         if hasattr(self, 'capture') and self.capture:
             self.capture.stop()
     
@@ -148,7 +167,10 @@ class Recorder:
         """监控切片文件，每3秒检查一次新生成的切片"""
         current_check_number = self.start_segment_number
         path = Path(self.output_path)
-        
+        # 看门狗：如果连续若干次没有检测到新切片则认为录制已停止或异常，需要自动停止录制
+        no_new_counter = 0
+        watchdog_threshold = 12  # 连续三次未检测到新切片则触发看门狗
+
         while not self.stop_event.is_set():
             # 从当前编号+1开始向后查找
             check_number = current_check_number + 1
@@ -184,6 +206,61 @@ class Recorder:
                 if self.sign_counter >= 3 and last_segment_number is not None:
                     self._generate_signature(last_segment_number)
                     self.sign_counter = 0  # 重置计数器
+                # 重置看门狗计数器
+                no_new_counter = 0
+            else:
+                # 没有检测到新片段，增加看门狗计数
+                no_new_counter += 1
+                self.logger.debug(f"未检测到新切片，看门狗计数={no_new_counter}/{watchdog_threshold}")
+
+                # 如果连续多次没有新切片，触发自动停止录制
+                if no_new_counter >= watchdog_threshold:
+                    self.logger.warning(f"看门狗触发：连续 {watchdog_threshold} 次未检测到新切片，自动停止录制。")
+                    # 先设置停止事件，通知录制线程结束
+                    try:
+                        self.stop_event.set()
+                    except Exception:
+                        pass
+
+                    # 尝试等待录制线程退出，若超时则主动进行清理
+                    wait_secs = 5
+                    waited = 0
+                    while waited < wait_secs and getattr(self, 'recording', False):
+                        time.sleep(0.5)
+                        waited += 0.5
+
+                    # 调用清理，确保容器和资源被释放（_cleanup 内部会检查 recording 状态）
+                    try:
+                        # 停止捕获
+                        if hasattr(self, 'capture') and self.capture:
+                            try:
+                                self.capture.stop()
+                                self.logger.info("捕获已停止")
+                            except Exception as e:
+                                self.logger.error(f"停止捕获时出错: {e}", exc_info=True)
+                        
+                        # 刷新并关闭输出容器
+                        if hasattr(self, 'output_container') and self.output_container:
+                            try:
+                                # 刷新编码器
+                                if hasattr(self, 'stream'):
+                                    for packet in self.stream.encode():
+                                        self.output_container.mux(packet)
+                                self.logger.info("编码器已刷新")
+                            except Exception as e:
+                                self.logger.error(f"刷新编码器时出错: {e}", exc_info=True)
+                            
+                            try:
+                                self.output_container.close()
+                                self.logger.info("输出容器已关闭")
+                            except Exception as e:
+                                self.logger.error(f"关闭输出容器时出错: {e}", exc_info=True)
+                            finally:
+                                self.output_container = None
+                    except Exception as e:
+                        self.logger.error(f"看门狗触发后清理失败: {e}", exc_info=True)
+                    # 退出监控循环
+                    break
             
             # 等待3秒后再次检查
             time.sleep(3)

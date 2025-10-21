@@ -11,7 +11,7 @@ class MssCapture(BaseCapture):
         self.monitor = self.sct.monitors[idx + 1]
         self.sct.close()
         self.sct = None
-        super().__init__(name, self.monitor["width"], self.monitor["height"], fps)
+        super().__init__(name, idx, self.monitor["width"], self.monitor["height"], fps)
 
     def capture_frame(self) -> np.ndarray:
         """Capture a single frame and return it as a numpy array."""

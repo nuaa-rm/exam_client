@@ -16,7 +16,7 @@ class CameraCapture(BaseCapture):
         width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         
-        super().__init__(name, width, height, fps)
+        super().__init__(name, idx, width, height, fps)
 
     def capture_frame(self) -> np.ndarray:
         """Capture a single frame and return it as a numpy array."""
