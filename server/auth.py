@@ -57,22 +57,47 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
                 # not a valid IP address; proceed with normal auth
                 logger.debug("Could not parse client IP: %s", client_ip)
 
-        token = request.cookies.get("teacher_jwt")
+        token = None
+        token_source = None
+
+        cookie_token = request.cookies.get("teacher_jwt")
+        if cookie_token:
+            token = cookie_token
+            token_source = "cookie"
+
         if not token:
-            logger.warning("Missing teacher_jwt cookie for path: %s (client_ip=%s)", path, client_ip)
-            raise HTTPException(status_code=401, detail="Missing teacher_jwt cookie")
+            header_token = request.headers.get("x-teacher-jwt") or request.headers.get("X-Teacher-JWT")
+            if header_token:
+                token = header_token
+                token_source = "header:x-teacher-jwt"
+
+        if not token:
+            qp = request.query_params
+            q_token = qp.get("teacher_jwt") or qp.get("token")
+            if q_token:
+                token = q_token
+                token_source = "query"
+
+        if not token:
+            logger.warning(
+                "Missing token for path: %s (client_ip=%s). Supported locations: cookie 'teacher_jwt', header 'X-Teacher-JWT', or query 'teacher_jwt'/'token'",
+                path,
+                client_ip,
+            )
+            raise HTTPException(status_code=401, detail="Missing token (check cookie, header, or query param)")
 
         try:
             # verify RS256 JWT using provided public key
             payload = jwt.decode(token, jwt_public_key, algorithms=["RS256"], options={"verify_aud": False})
-            # attach payload to request.state for downstream handlers
+            # attach payload and token metadata to request.state for downstream handlers
             request.state.teacher_payload = payload
-            logger.info("JWT validated for path %s, sub=%s", path, payload.get("sub"))
+            request.state.teacher_token_source = token_source
+            logger.info("JWT validated for path %s, sub=%s (source=%s)", path, payload.get("sub"), token_source)
         except jwt.ExpiredSignatureError:
-            logger.warning("Expired token for path: %s", path)
+            logger.warning("Expired token for path: %s (source=%s)", path, token_source)
             raise HTTPException(status_code=401, detail="Token expired")
         except jwt.InvalidTokenError as e:
-            logger.error("Invalid token for path %s: %s", path, e)
+            logger.error("Invalid token for path %s (source=%s): %s", path, token_source, e)
             raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
 
         return await call_next(request)
