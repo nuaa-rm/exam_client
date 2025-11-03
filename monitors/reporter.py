@@ -1,4 +1,4 @@
-import os
+import json
 from typing import List, Dict
 
 import requests
@@ -18,15 +18,16 @@ class MonitorReporter:
             'user-agent': 'exam-client/1.0'
         }
         data = {'uname': username, 'password': password, 'tfa': None, 'authnChallenge': None}
-        res = requests.post(f'http://{endpoint}/exam/login', data=parse.urlencode(data), headers=HEADERS)
+        self.session = requests.session()
+        res = self.session.post(f'http://{endpoint}/login', data=parse.urlencode(data), headers=HEADERS)
         res.raise_for_status()
-        self.session = res.cookies
+        print(self.session.cookies.get_dict())
         self.endpoint = endpoint
         self.service = MonitorService(callback=self.report, interval=interval)
         self.alerts: List[Dict] | None = None
 
     def get_cookies(self):
-        return self.session
+        return self.session.cookies.get_dict()
 
     def get_alerts(self):
         return self.alerts
@@ -41,7 +42,7 @@ class MonitorReporter:
                 'accept': 'application/json',
                 'user-agent': 'exam-client/1.0'
             }
-            res = requests.post(f'http://{self.endpoint}/exam/report', json={'alerts': alerts}, cookies=self.session, headers=HEADERS)
+            res = self.session.post(f'http://{self.endpoint}/exam/alert', json={'alerts': json.dumps(alerts)}, headers=HEADERS)
             res.raise_for_status()
         except Exception:
             logger.exception('Failed to report alerts to server')

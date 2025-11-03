@@ -1,10 +1,10 @@
 from threading import Thread
 import time
-import json
 
 import webview
 from requests import HTTPError
 from urllib.parse import urlparse
+import json
 
 from monitors.reporter import MonitorReporter
 from server.app import run_server
@@ -21,13 +21,7 @@ injectJs = """(function() {
         const host = window.location.host || '';
         const endpoint = "%s";
 
-        try {
-            document.cookie = "%s";
-        } catch (e) {
-            console.error('Failed to set cookie', e);
-        }
-
-        if (host === 'localhost:34519' || (endpoint && host === endpoint)) {
+        if (host !== 'localhost:34519' && !(endpoint && host === endpoint)) {
             const target = endpoint ? `http://${endpoint}/exam` : 'http://localhost:34519/';
             if (window.location.href !== target) {
                 console.log('Redirecting to', target);
@@ -37,6 +31,33 @@ injectJs = """(function() {
     } catch (err) {
         console.error('inject error', err);
     }
+})();"""
+
+injectCookieJs = """(function() {
+    try {
+        var payload = "%s";
+        // Try to detect JSON array payload for multiple cookies.
+        try {
+            if (payload && payload[0] === '[') {
+                var cookies = JSON.parse(payload);
+                cookies.forEach(function(c) { document.cookie = c; });
+            } else if (payload) {
+                document.cookie = payload;
+            }
+            window.location.reload();
+        } catch (inner) {
+            // Fallback: attempt to set as single cookie string
+            try { document.cookie = payload; window.location.reload(); } catch (e) { console.error('Failed to set cookie', e); }
+        }
+    } catch (e) {
+        console.error('Failed to set cookie', e);
+    }
+    document.addEventListener('click', function(e) {
+        if (e.target.tagName === 'A' && e.target.target === '_blank') {
+            e.preventDefault();
+            window.location.href = e.target.href;
+        }
+    });
 })();"""
 
 class JsApi:
@@ -94,6 +115,32 @@ class JsApi:
             return None
         return self.reporter.endpoint
     
+    def gotoExam(self):
+        cookie_str = ""
+        endpoint = ""
+        if self.reporter:
+            try:
+                endpoint = self.reporter.endpoint
+                sess = self.reporter.get_cookies()
+            except Exception:
+                sess = None
+            cookie_str = session_to_cookie_string(sess)
+
+        try:
+            if window:
+                window.load_url(f'http://{endpoint}/exam/')
+                time.sleep(1)
+                # Prepare payload (either a JSON array string for multiple cookies, or a plain cookie string)
+                if isinstance(cookie_str, (list, tuple)):
+                    cs = json.dumps(list(cookie_str))
+                else:
+                    cs = cookie_str or ""
+                # escape backslashes and quotes so the payload fits into the JS string literal
+                cs = cs.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '').replace('\r', '')
+                window.run_js(injectCookieJs % cs)
+        except Exception:
+            logger.error("Failed to inject script", exc_info=True)
+    
 jsApi = JsApi()
 
 def _periodic_injector(window_obj, js_api=None, interval=10):
@@ -101,18 +148,10 @@ def _periodic_injector(window_obj, js_api=None, interval=10):
     while True:
         try:
             endpoint = None
-            cookie_str = ""
             if js_api and hasattr(js_api, 'reporter') and js_api.reporter:
                 endpoint = js_api.reporter.endpoint
-                try:
-                    sess = js_api.reporter.get_cookies()
-                except Exception:
-                    sess = None
-                cookie_str = session_to_cookie_string(sess)
-
             ep = endpoint or ''
-            cs = cookie_str.replace('"', '\\"')
-            script = injectJs % (ep, cs)
+            script = injectJs % ep
 
             try:
                 window_obj.run_js(script)

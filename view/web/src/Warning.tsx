@@ -28,9 +28,9 @@ function Warning() {
             message.error(`获取警告信息失败，${(e as Error).message}`);
         }
     };
-    fetchAlerts();
 
     if (!ready) {
+        fetchAlerts();
         return <Loading message="正在检测考试环境" />;
     }
 

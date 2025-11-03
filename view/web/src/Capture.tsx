@@ -262,7 +262,7 @@ function Capture() {
 			const ok = await api.captureHealth()
 			setCaptureHealthy(!!ok)
 			if (ok) {
-				window.location.href = `http://${await api.getEndpoint()}/exam`
+				api.gotoExam()
 			} else {
 				message.error('录像未正常开启')
 			}

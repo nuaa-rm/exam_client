@@ -16,6 +16,7 @@ interface PyWebviewApi {
   startCameraRecorder: (camera_idx: number, camera_name: string) => Promise<boolean>;
   captureHealth: () => Promise<boolean>;
   getEndpoint: () => Promise<string | null>;
+  gotoExam: () => Promise<void>;
 }
 
 declare global {
